@@ -1,8 +1,21 @@
 use std::error::Error;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use clap::ArgMatches;
 use regex::{Regex, RegexBuilder};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
+
+struct Input {
+    name: String,
+    file: File,
+}
+
+#[derive(Debug)]
+struct Fortune {
+    source: String,
+    text: String
+}
 
 const ARG_SOURCE_ID: &str = "SOURCES";
 const ARG_REGEX_ID: &str = "PATTERN";
@@ -14,6 +27,7 @@ pub struct Config {
     sources: Vec<String>,
     pattern: Option<Regex>,
     seed: Option<u64>,
+    buffer_size: usize,
 }
 
 pub fn get_args() -> MyResult<Config> {
@@ -35,12 +49,15 @@ pub fn get_args() -> MyResult<Config> {
         .arg(clap::Arg::new(ARG_SEED_ID)
             .short('s')
             .long("seed"))
+        .arg(clap::Arg::new("buffer")
+            .short('b'))
         .get_matches();
 
     let sources = parse_file_names(&mut args)?;
     let pattern = build_pattern(&mut args)?;
     let seed = parse_seed(&mut args)?;
-    Ok(Config{sources, pattern, seed})
+    let buffer_size: usize = args.remove_one::<String>("buffer").unwrap().parse()?;
+    Ok(Config{sources, pattern, seed, buffer_size})
 }
 
 fn parse_file_names(args: &mut ArgMatches) -> MyResult<Vec<String>> {
@@ -71,6 +88,26 @@ fn parse_seed(args: &mut ArgMatches) -> MyResult<Option<u64>> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:?}", config);
+    let mut buf = vec![0u8; config.buffer_size];
+    let mut input = open_file(config.sources.get(0).unwrap().as_str()).unwrap();
+    input.file.seek(SeekFrom::Start(315))?;
+    input.file.read_exact(&mut buf)?;
+    let string = String::from_utf8_lossy(&buf);
+    println!("{string}");
     Ok(())
+}
+
+fn open_file(path: &str) -> Option<Input> {
+    match File::open(path) {
+        Ok(open_file) => {
+            Some(Input{
+                name: String::from(path),
+                file: open_file,
+            })
+        },
+        Err(e) => {
+            eprintln!("Could not open {path}: {e}");
+            None
+        }
+    }
 }
