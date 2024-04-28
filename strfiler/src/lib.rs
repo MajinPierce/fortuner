@@ -1,6 +1,9 @@
 use std::error::Error;
+use std::fmt::LowerExp;
+use std::fs;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::path::Path;
 use clap::ArgMatches;
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
@@ -109,9 +112,21 @@ fn filter_empty_entries(entries: Vec<Entry>) -> Vec<Entry> {
 }
 
 fn write_entries(file_name: &str, entries: Vec<Entry>) {
-    println!("{file_name}");
-    println!("number of entries: {:0>6x}", entries.len());
+    let dat_file = Path::new(file_name).with_extension("dat");
+    let mut file = File::create(dat_file).unwrap();
+    let size = format!("{:0>6x}\n", entries.len());
+    file.write(size.as_bytes()).unwrap();
     for entry in entries {
-        println!("offset {:0>6x}, size {:0>6x}", entry.offset, entry.size);
+        let formatted_entry = format!("{:0>6x} {:0>6x}\n", entry.offset, entry.size);
+        file.write(formatted_entry.as_bytes()).unwrap();
+    }
+}
+
+fn print_entries(file_name: &str, entries: Vec<Entry>) {
+    let dat_file = Path::new(file_name).with_extension("dat");
+    println!("{}", dat_file.display());
+    println!("{:0>6x}", entries.len());
+    for entry in entries {
+        println!("{:0>6x} {:0>6x}", entry.offset, entry.size);
     }
 }
