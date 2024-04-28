@@ -15,6 +15,11 @@ pub struct Config {
     delim: String,
 }
 
+struct Entry {
+    offset: usize,
+    size: usize,
+}
+
 pub fn get_args() -> MyResult<Config> {
     let args = clap::Command::new("strfiler")
         .author("MajinPierce")
@@ -48,8 +53,10 @@ fn parse_file_names(args: &mut ArgMatches) -> MyResult<Vec<String>> {
 
 pub fn run(config: Config) -> MyResult<()> {
     for file in config.files {
-        let mut input = open_file(file.as_str()).unwrap();
-        get_file_entries(&mut input, config.delim.as_str())?;
+        if let Some(mut input) = open_file(file.as_str()) {
+            let entries = get_entry_locations(&mut input, config.delim.as_str())?;
+            write_entries(file.as_str(), entries);
+        }
     }
     Ok(())
 }
@@ -57,6 +64,10 @@ pub fn run(config: Config) -> MyResult<()> {
 fn open_file(path: &str) -> Option<Input> {
     match File::open(path) {
         Ok(open_file) => {
+            if open_file.metadata().unwrap().len() >= 16777216 {
+                eprintln!("File too large: {path}");
+                return None;
+            }
             Some(Box::new(BufReader::new(open_file)))
         },
         Err(e) => {
@@ -66,18 +77,19 @@ fn open_file(path: &str) -> Option<Input> {
     }
 }
 
-fn get_file_entries(input: &mut Input, delim: &str) -> MyResult<()> {
+fn get_entry_locations(input: &mut Input, delim: &str) -> MyResult<Vec<Entry>> {
     let mut offset: usize = 0;
     let mut entry_size: usize = 0;
     let mut buf = String::new();
+    let mut entries: Vec<Entry> = Vec::new();
     loop {
         let line_size = input.read_line(&mut buf)?;
         if line_size == 0 {
-            println!("entry: offset {offset}, size {entry_size}");
+            entries.push(Entry {offset, size: entry_size});
             break;
         }
         if buf.as_str().trim() == delim {
-            println!("entry: offset {offset}, size {entry_size}");
+            entries.push(Entry {offset, size: entry_size});
             offset += entry_size + buf.len();
             entry_size = 0;
             buf.clear();
@@ -86,5 +98,20 @@ fn get_file_entries(input: &mut Input, delim: &str) -> MyResult<()> {
         entry_size += line_size;
         buf.clear();
     }
-    Ok(())
+    let entries = filter_empty_entries(entries);
+    Ok(entries)
+}
+
+fn filter_empty_entries(entries: Vec<Entry>) -> Vec<Entry> {
+    entries.into_iter()
+        .filter(|entry| entry.size > 0)
+        .collect()
+}
+
+fn write_entries(file_name: &str, entries: Vec<Entry>) {
+    println!("{file_name}");
+    println!("number of entries: {:0>6x}", entries.len());
+    for entry in entries {
+        println!("offset {:0>6x}, size {:0>6x}", entry.offset, entry.size);
+    }
 }
