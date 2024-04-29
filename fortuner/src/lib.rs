@@ -1,7 +1,9 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::path::Path;
 use clap::ArgMatches;
+use rand::Rng;
 use regex::{Regex, RegexBuilder};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
@@ -15,6 +17,11 @@ struct Input {
 struct Fortune {
     source: String,
     text: String
+}
+
+struct Entry {
+    offset: usize,
+    size: usize,
 }
 
 const ARG_SOURCE_ID: &str = "SOURCES";
@@ -59,8 +66,10 @@ pub fn get_args() -> MyResult<Config> {
     let sources = parse_file_names(&mut args)?;
     let pattern = build_pattern(&mut args)?;
     let seed = parse_seed(&mut args)?;
-    let buffer_size: usize = args.remove_one::<String>("buffer").unwrap().parse()?;
-    let offset: usize = args.remove_one::<String>("offset").unwrap().parse()?;
+    // let buffer_size: usize = args.remove_one::<String>("buffer").unwrap().parse()?;
+    // let offset: usize = args.remove_one::<String>("offset").unwrap().parse()?;
+    let buffer_size = 0;
+    let offset = 0;
     Ok(Config{sources, pattern, seed, buffer_size, offset})
 }
 
@@ -92,13 +101,30 @@ fn parse_seed(args: &mut ArgMatches) -> MyResult<Option<u64>> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    let mut buf = vec![0u8; config.buffer_size];
-    let mut input = open_file(config.sources.get(0).unwrap().as_str()).unwrap();
-    input.file.seek(SeekFrom::Start(config.offset as u64))?;
+    let file_name = config.sources.get(0).unwrap().as_str();
+    let entry: Entry = get_random_entry(file_name, &config)?;
+    let mut input = open_file(file_name).unwrap();
+    input.file.seek(SeekFrom::Start(entry.offset as u64))?;
+    let mut buf = vec![0u8; entry.size];
     input.file.read_exact(&mut buf)?;
     let string = String::from_utf8_lossy(&buf);
     println!("{string}");
     Ok(())
+}
+
+fn get_random_entry(file_name: &str, config: &Config) -> MyResult<Entry> {
+    let dat_path = Path::new(file_name).with_extension("dat");
+    let file = File::open(dat_path)?;
+    let file = BufReader::new(file);
+    let mut lines = file.lines();
+    let first_line = lines.next().unwrap()?;
+    let num_entries = usize::from_str_radix(first_line.as_str(), 16)?;
+    let chosen_entry = rand::thread_rng().gen_range(0..num_entries);
+    let line = lines.nth(chosen_entry).unwrap()?;
+    let line_elem: Vec<&str> = line.split_whitespace().collect();
+    let offset = usize::from_str_radix(line_elem.get(0).unwrap(), 16)?;
+    let size = usize::from_str_radix(line_elem.get(1).unwrap(), 16)?;
+    Ok(Entry{offset, size})
 }
 
 fn open_file(path: &str) -> Option<Input> {
