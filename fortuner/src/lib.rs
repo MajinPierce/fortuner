@@ -1,42 +1,31 @@
 use std::error::Error;
+use std::fmt::Debug;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Lines, Read, Seek, SeekFrom};
 use std::path::Path;
 use clap::ArgMatches;
+use rand::prelude::IteratorRandom;
 use rand::Rng;
 use regex::{Regex, RegexBuilder};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
-struct Input {
-    name: String,
-    file: File,
-}
-
-#[derive(Debug)]
-struct Fortune {
-    source: String,
-    text: String
-}
-
 struct Entry {
+    file_name: String,
     offset: usize,
     size: usize,
+}
+
+pub struct Config {
+    sources: Vec<String>,
+    pattern: Option<Regex>,
+    seed: Option<u64>,
 }
 
 const ARG_SOURCE_ID: &str = "SOURCES";
 const ARG_REGEX_ID: &str = "PATTERN";
 const ARG_SEED_ID: &str = "SEED";
 const ARG_INSENS_ID: &str = "INSENSITIVE";
-
-#[derive(Debug)]
-pub struct Config {
-    sources: Vec<String>,
-    pattern: Option<Regex>,
-    seed: Option<u64>,
-    buffer_size: usize,
-    offset: usize,
-}
 
 pub fn get_args() -> MyResult<Config> {
     let mut args = clap::Command::new("fortuner")
@@ -57,20 +46,12 @@ pub fn get_args() -> MyResult<Config> {
         .arg(clap::Arg::new(ARG_SEED_ID)
             .short('s')
             .long("seed"))
-        .arg(clap::Arg::new("buffer")
-            .short('l'))
-        .arg(clap::Arg::new("offset")
-            .short('o'))
         .get_matches();
 
     let sources = parse_file_names(&mut args)?;
     let pattern = build_pattern(&mut args)?;
     let seed = parse_seed(&mut args)?;
-    // let buffer_size: usize = args.remove_one::<String>("buffer").unwrap().parse()?;
-    // let offset: usize = args.remove_one::<String>("offset").unwrap().parse()?;
-    let buffer_size = 0;
-    let offset = 0;
-    Ok(Config{sources, pattern, seed, buffer_size, offset})
+    Ok(Config{sources, pattern, seed})
 }
 
 fn parse_file_names(args: &mut ArgMatches) -> MyResult<Vec<String>> {
@@ -101,43 +82,72 @@ fn parse_seed(args: &mut ArgMatches) -> MyResult<Option<u64>> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    let file_name = config.sources.get(0).unwrap().as_str();
-    let entry: Entry = get_random_entry(file_name, &config)?;
-    let mut input = open_file(file_name).unwrap();
-    input.file.seek(SeekFrom::Start(entry.offset as u64))?;
-    let mut buf = vec![0u8; entry.size];
-    input.file.read_exact(&mut buf)?;
-    let string = String::from_utf8_lossy(&buf);
-    println!("{string}");
+    let file_name = pick_random_source(&config);
+    let entry = pick_random_entry(file_name, &config)?;
+    let fortune = read_fortune_from_file(entry)?;
+    println!("{fortune}");
     Ok(())
 }
 
-fn get_random_entry(file_name: &str, config: &Config) -> MyResult<Entry> {
-    let dat_path = Path::new(file_name).with_extension("dat");
-    let file = File::open(dat_path)?;
-    let file = BufReader::new(file);
-    let mut lines = file.lines();
-    let first_line = lines.next().unwrap()?;
-    let num_entries = usize::from_str_radix(first_line.as_str(), 16)?;
-    let chosen_entry = rand::thread_rng().gen_range(0..num_entries);
-    let line = lines.nth(chosen_entry).unwrap()?;
-    let line_elem: Vec<&str> = line.split_whitespace().collect();
-    let offset = usize::from_str_radix(line_elem.get(0).unwrap(), 16)?;
-    let size = usize::from_str_radix(line_elem.get(1).unwrap(), 16)?;
-    Ok(Entry{offset, size})
+fn pick_random_source(config: &Config) -> &String {
+    let source = config.sources.iter()
+        .choose(&mut rand::thread_rng())
+        .expect("List of sources was empty");
+    source
 }
 
-fn open_file(path: &str) -> Option<Input> {
-    match File::open(path) {
-        Ok(open_file) => {
-            Some(Input{
-                name: String::from(path),
-                file: open_file,
-            })
-        },
-        Err(e) => {
-            eprintln!("Could not open {path}: {e}");
-            None
-        }
+fn pick_random_entry(file_name: &str, config: &Config) -> MyResult<Entry> {
+    let dat_file = open_file_dat(file_name)?;
+    let mut lines = dat_file.lines();
+    let num_entries = parse_num_entries(&mut lines)?;
+    let chosen_entry_index = choose_entry_index(num_entries, &config.seed);
+    let (offset, size) = parse_entry_offset_and_size(lines, chosen_entry_index)?;
+    let entry = Entry{file_name: String::from(file_name), offset, size};
+    Ok(entry)
+}
+
+fn parse_num_entries(mut lines: &mut Lines<BufReader<File>>) -> MyResult<usize> {
+    let first_line = match lines.next() {
+        None => return Err(From::from("dat file is blank")),
+        Some(line) => line?
+    };
+    let num_entries = usize::from_str_radix(&first_line, 16)?;
+    Ok(num_entries)
+}
+
+fn choose_entry_index(num_entries: usize, seed: &Option<u64>) -> usize {
+    rand::thread_rng().gen_range(0..num_entries)
+}
+
+fn parse_entry_offset_and_size(mut lines: Lines<BufReader<File>>, index: usize) -> MyResult<(usize, usize)>{
+    let line = lines.nth(index).unwrap()?;
+    let line_elem: Vec<&str> = line.split_whitespace().collect();
+    if line_elem.len() < 2 {
+        return Err(From::from("dat file entry missing required info. Please validate dat file."));
     }
+    let offset = usize::from_str_radix(line_elem.get(0).unwrap(), 16)?;
+    let size = usize::from_str_radix(line_elem.get(1).unwrap(), 16)?;
+    Ok((offset, size))
+}
+
+fn read_fortune_from_file(entry: Entry) -> MyResult<String> {
+    let mut file = open_file(&entry.file_name)?;
+    let mut buf = vec![0u8; entry.size];
+    file.seek(SeekFrom::Start(entry.offset as u64))?;
+    file.read_exact(&mut buf)?;
+    let fortune = String::from_utf8_lossy(&buf).into_owned();
+    Ok(fortune)
+}
+
+fn open_file(path: &str) -> MyResult<File> {
+    match File::open(path) {
+        Ok(open_file) => Ok(open_file),
+        Err(e) => Err(Box::from(e))
+    }
+}
+
+fn open_file_dat(parent_path: &str) -> MyResult<BufReader<File>> {
+    let dat_path = Path::new(parent_path).with_extension("dat");
+    let file = File::open(dat_path)?;
+    Ok(BufReader::new(file))
 }
