@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader, Lines, Read, Seek, SeekFrom};
 use std::path::Path;
 use clap::ArgMatches;
 use rand::prelude::IteratorRandom;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use regex::{Regex, RegexBuilder};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
@@ -90,8 +90,12 @@ pub fn run(config: Config) -> MyResult<()> {
 }
 
 fn pick_random_source(config: &Config) -> &String {
+    let mut rng = match config.seed {
+        None => rand::rngs::StdRng::from_rng(rand::thread_rng()).unwrap(),
+        Some(seed) => rand::rngs::StdRng::seed_from_u64(seed)
+    };
     let source = config.sources.iter()
-        .choose(&mut rand::thread_rng())
+        .choose(&mut rng)
         .expect("List of sources was empty");
     source
 }
@@ -115,8 +119,12 @@ fn parse_num_entries(mut lines: &mut Lines<BufReader<File>>) -> MyResult<usize> 
     Ok(num_entries)
 }
 
-fn choose_entry_index(num_entries: usize, seed: &Option<u64>) -> usize {
-    rand::thread_rng().gen_range(0..num_entries)
+fn choose_entry_index(num_entries: usize, seed_opt: &Option<u64>) -> usize {
+    let mut rng = match seed_opt {
+        None => rand::rngs::StdRng::from_rng(rand::thread_rng()).unwrap(),
+        Some(seed) => rand::rngs::StdRng::seed_from_u64(*seed)
+    };
+    rng.gen_range(0..num_entries)
 }
 
 fn parse_entry_offset_and_size(mut lines: Lines<BufReader<File>>, index: usize) -> MyResult<(usize, usize)>{
