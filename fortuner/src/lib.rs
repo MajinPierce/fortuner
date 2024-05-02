@@ -1,12 +1,14 @@
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fmt::Debug;
-use std::fs::File;
+use std::fs::{File, metadata};
 use std::io::{BufRead, BufReader, Lines, Read, Seek, SeekFrom};
 use std::path::Path;
 use clap::ArgMatches;
-use rand::prelude::IteratorRandom;
+use rand::prelude::{IteratorRandom, StdRng};
 use rand::{Rng, SeedableRng};
 use regex::{Regex, RegexBuilder};
+use walkdir::WalkDir;
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -33,8 +35,9 @@ pub fn get_args() -> MyResult<Config> {
         .version("0.1.0")
         .about("fortune but Rust")
         .arg(clap::Arg::new(ARG_SOURCE_ID)
-            .num_args(1..)
-            .required(true))
+            .num_args(0..)
+            .default_value("fortuner/tests/inputs")
+        )
         .arg(clap::Arg::new(ARG_REGEX_ID)
             .short('m')
             .long("pattern"))
@@ -82,22 +85,71 @@ fn parse_seed(args: &mut ArgMatches) -> MyResult<Option<u64>> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    let file_name = pick_random_source(&config);
-    let entry = pick_random_entry(file_name, &config)?;
+    let sources = get_full_source_list(&config)?;
+    let file_name = pick_random_source(sources, &config.seed);
+    let entry = pick_random_entry(&file_name, &config)?;
     let fortune = read_fortune_from_file(entry)?;
     println!("{fortune}");
     Ok(())
 }
 
-fn pick_random_source(config: &Config) -> &String {
-    let mut rng = match config.seed {
-        None => rand::rngs::StdRng::from_rng(rand::thread_rng()).unwrap(),
-        Some(seed) => rand::rngs::StdRng::seed_from_u64(seed)
-    };
-    let source = config.sources.iter()
+fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
+    let mut sources: Vec<String> = Vec::new();
+    for path in &config.sources {
+        match metadata(path) {
+            Ok(meta) => if meta.is_dir() {
+                sources.append(&mut read_dir(path));
+            } else {
+                sources.push(path.clone())
+            },
+            Err(e) => {
+                eprintln!("{path}: {e}");
+            }
+        }
+    }
+    sources = sources.into_iter()
+        .filter(|path| has_dat(path))
+        .collect();
+
+    if sources.is_empty() {
+        Err(From::from(String::from("No valid sources. Please check dat files.")))
+    } else {
+        Ok(sources)
+    }
+}
+
+fn read_dir(dir: &str) -> Vec<String> {
+    WalkDir::new(dir).into_iter()
+        .map(|result| String::from(result.unwrap().path().to_str().unwrap()))
+        .filter(|sub_path| !metadata(sub_path).unwrap().is_dir())
+        .filter(|sub_path| !is_dat(sub_path))
+        .collect()
+}
+
+fn is_dat(path: &str) -> bool {
+    match Path::new(path).extension() {
+        None => false,
+        Some(ext) => ext == "dat",
+    }
+}
+
+fn has_dat(path: &str) -> bool {
+    Path::new(path).with_extension("dat").exists()
+}
+
+fn pick_random_source(sources: Vec<String>, seed_opt: &Option<u64>) -> String {
+    let mut rng = get_rng(seed_opt);
+    let source = sources.iter()
         .choose(&mut rng)
         .expect("List of sources was empty");
-    source
+    source.clone()
+}
+
+fn get_rng(seed_opt: &Option<u64>) -> StdRng {
+    match seed_opt {
+        None => StdRng::from_rng(rand::thread_rng()).unwrap(),
+        Some(seed) => StdRng::seed_from_u64(*seed)
+    }
 }
 
 fn pick_random_entry(file_name: &str, config: &Config) -> MyResult<Entry> {
@@ -120,10 +172,7 @@ fn parse_num_entries(mut lines: &mut Lines<BufReader<File>>) -> MyResult<usize> 
 }
 
 fn choose_entry_index(num_entries: usize, seed_opt: &Option<u64>) -> usize {
-    let mut rng = match seed_opt {
-        None => rand::rngs::StdRng::from_rng(rand::thread_rng()).unwrap(),
-        Some(seed) => rand::rngs::StdRng::seed_from_u64(*seed)
-    };
+    let mut rng = get_rng(seed_opt);
     rng.gen_range(0..num_entries)
 }
 
