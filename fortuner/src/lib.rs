@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fs::{File, metadata};
 use std::io::{BufRead, BufReader, Lines, Read, Seek, SeekFrom};
