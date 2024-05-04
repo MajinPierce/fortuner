@@ -59,7 +59,7 @@ pub fn get_args() -> MyResult<Config> {
 fn parse_file_names(args: &mut ArgMatches) -> MyResult<Vec<String>> {
     match args.remove_many::<String>(ARG_SOURCE_ID) {
         Some(sources) => Ok(sources.collect()),
-        None => Err(From::from(String::from("Could not read file names"))),
+        None => Err(From::from("Could not read file names")),
     }
 }
 
@@ -111,7 +111,7 @@ fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
         .collect();
 
     if sources.is_empty() {
-        Err(From::from(String::from("No valid sources. Please check dat files.")))
+        Err(From::from("No valid sources. Please check dat files."))
     } else {
         Ok(sources)
     }
