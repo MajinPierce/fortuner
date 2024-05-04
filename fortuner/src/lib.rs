@@ -34,19 +34,23 @@ pub fn get_args() -> MyResult<Config> {
         .about("fortune but Rust")
         .arg(clap::Arg::new(ARG_SOURCE_ID)
             .num_args(0..)
-            .default_value("fortuner/tests/inputs")
+            .default_value("$HOME/Documents/sources")
         )
         .arg(clap::Arg::new(ARG_REGEX_ID)
             .short('m')
-            .long("pattern"))
+            .long("pattern")
+            .help("Basic regex pattern matching. Searches for any sources that match the pattern"))
         .arg(clap::Arg::new(ARG_INSENS_ID)
             .short('i')
             .long("case-insensitive")
             .requires(ARG_REGEX_ID)
-            .action(clap::ArgAction::SetTrue))
+            .action(clap::ArgAction::SetTrue)
+            .help("Enables case insensitive pattern matching"))
         .arg(clap::Arg::new(ARG_SEED_ID)
             .short('s')
-            .long("seed"))
+            .long("seed")
+            .conflicts_with_all([ARG_REGEX_ID, ARG_INSENS_ID])
+            .help("Set the u64 rng seed for consistent fortune retrieval"))
         .get_matches();
 
     let sources = parse_file_names(&mut args)?;
@@ -121,7 +125,7 @@ fn get_random_fortune(sources: Vec<String>, config: Config) -> MyResult<()> {
     let entry = pick_random_entry(&file_name, &config)?;
     let mut file = open_file(&entry.file_name)?;
     let fortune = read_fortune_from_file(&entry, &mut file)?;
-    println!("{fortune}");
+    print!("{fortune}");
     Ok(())
 }
 
