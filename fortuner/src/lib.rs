@@ -85,9 +85,9 @@ fn parse_seed(args: &mut ArgMatches) -> MyResult<Option<u64>> {
 pub fn run(config: Config) -> MyResult<()> {
     let sources = get_full_source_list(&config)?;
     if config.pattern.is_some() {
-        find_fortunes_matching_pattern(sources, &config)
+        find_fortunes_matching_pattern(sources, config)
     } else {
-        get_random_fortune(sources, &config)
+        get_random_fortune(sources, config)
     }
 }
 
@@ -116,17 +116,22 @@ fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
     }
 }
 
-fn get_random_fortune(sources: Vec<String>, config: &Config) -> MyResult<()> {
+fn get_random_fortune(sources: Vec<String>, config: Config) -> MyResult<()> {
     let file_name = pick_random_source(sources, &config.seed);
     let entry = pick_random_entry(&file_name, &config)?;
-    let fortune = read_fortune_from_file(entry)?;
+    let mut file = open_file(&entry.file_name)?;
+    let fortune = read_fortune_from_file(&entry, &mut file)?;
     println!("{fortune}");
     Ok(())
 }
 
-fn find_fortunes_matching_pattern(sources: Vec<String>, config: &Config) -> MyResult<()> {
-
-    Ok(())
+fn find_fortunes_matching_pattern(sources: Vec<String>, config: Config) -> MyResult<()> {
+    let mut all_entries: Vec<Vec<Entry>> = Vec::new();
+    for source in &sources {
+        let entries = get_entries(source)?;
+        all_entries.push(entries);
+    }
+    find_matching_entries(all_entries, &config.pattern.unwrap())
 }
 
 fn read_dir(dir: &str) -> Vec<String> {
@@ -173,6 +178,24 @@ fn pick_random_entry(file_name: &str, config: &Config) -> MyResult<Entry> {
     Ok(entry)
 }
 
+fn get_entries(file_name: &str) -> MyResult<Vec<Entry>> {
+    let dat_file = open_file_dat(file_name)?;
+    let mut lines = dat_file.lines();
+    let num_entries = parse_num_entries(&mut lines)?;
+    let mut entries = Vec::new();
+    for _ in 0..num_entries {
+        let line = lines.next().unwrap()?;
+        let line_elem: Vec<&str> = line.split_whitespace().collect();
+        if line_elem.len() < 2 {
+            return Err(From::from("dat file entry missing required info. Please validate dat file."));
+        }
+        let offset = usize::from_str_radix(line_elem.get(0).unwrap(), 16)?;
+        let size = usize::from_str_radix(line_elem.get(1).unwrap(), 16)?;
+        entries.push(Entry{file_name: String::from(file_name), offset, size})
+    }
+    Ok(entries)
+}
+
 fn parse_num_entries(lines: &mut Lines<BufReader<File>>) -> MyResult<usize> {
     let first_line = match lines.next() {
         None => return Err(From::from("dat file is blank")),
@@ -198,8 +221,20 @@ fn parse_entry_offset_and_size(mut lines: Lines<BufReader<File>>, index: usize) 
     Ok((offset, size))
 }
 
-fn read_fortune_from_file(entry: Entry) -> MyResult<String> {
-    let mut file = open_file(&entry.file_name)?;
+fn find_matching_entries(all_entries: Vec<Vec<Entry>>, pattern: &Regex) -> MyResult<()> {
+    for entries in all_entries {
+        let mut file = open_file(&entries.get(0).unwrap().file_name)?;
+        for entry in entries {
+            let fortune = read_fortune_from_file(&entry, &mut file)?;
+            if pattern.is_match(&fortune) {
+                println!("{fortune}");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn read_fortune_from_file(entry: &Entry, file: &mut File) -> MyResult<String> {
     let mut buf = vec![0u8; entry.size];
     file.seek(SeekFrom::Start(entry.offset as u64))?;
     file.read_exact(&mut buf)?;
