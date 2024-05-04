@@ -69,7 +69,7 @@ fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
             Ok(meta) => if meta.is_dir() {
                 sources.append(&mut read_dir(path));
             } else {
-                sources.push(path.clone())
+                sources.push(path.clone());
             },
             Err(e) => {
                 eprintln!("{path}: {e}");
@@ -88,18 +88,23 @@ fn read_dir(dir: &str) -> Vec<String> {
     WalkDir::new(dir).into_iter()
         .map(|result| String::from(result.unwrap().path().to_str().unwrap()))
         .filter(|sub_path| !metadata(sub_path).unwrap().is_dir())
-        .filter(|sub_path| !is_dat(sub_path))
+        .filter(|sub_path| !is_invalid_type(sub_path))
         .collect()
 }
 
-fn is_dat(path: &str) -> bool {
-    match Path::new(path).extension() {
+fn is_invalid_type(path: &str) -> bool {
+    let path= Path::new(path);
+    let is_dat = match path.extension() {
         None => false,
         Some(ext) => ext == "dat",
-    }
+    };
+    let is_invalid = path.file_name().unwrap() == ".DS_Store";
+
+    is_dat || is_invalid
 }
 
 fn create_dat_for_source(source: &str, delim: &str) -> MyResult<()> {
+    eprintln!("creating dat for {source}");
     if let Some(mut input) = open_file(source) {
         let entries = get_entry_locations(&mut input, delim)?;
         if !entries.is_empty(){
