@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::fmt::Debug;
 use std::fs::{File, metadata};
 use std::io::{BufRead, BufReader, Lines, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -67,7 +66,7 @@ fn build_pattern(args: &mut ArgMatches) -> MyResult<Option<Regex>> {
     if !args.contains_id(ARG_REGEX_ID) {
         return Ok(None);
     }
-    let mut pattern: String = args.remove_one(ARG_REGEX_ID).unwrap();
+    let pattern: String = args.remove_one(ARG_REGEX_ID).unwrap();
     let regex =  RegexBuilder::new(pattern.as_str())
         .case_insensitive(args.get_flag(ARG_INSENS_ID))
         .build()?;
@@ -85,11 +84,11 @@ fn parse_seed(args: &mut ArgMatches) -> MyResult<Option<u64>> {
 
 pub fn run(config: Config) -> MyResult<()> {
     let sources = get_full_source_list(&config)?;
-    let file_name = pick_random_source(sources, &config.seed);
-    let entry = pick_random_entry(&file_name, &config)?;
-    let fortune = read_fortune_from_file(entry)?;
-    println!("{fortune}");
-    Ok(())
+    if config.pattern.is_some() {
+        find_fortunes_matching_pattern(sources, &config)
+    } else {
+        get_random_fortune(sources, &config)
+    }
 }
 
 fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
@@ -115,6 +114,19 @@ fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
     } else {
         Ok(sources)
     }
+}
+
+fn get_random_fortune(sources: Vec<String>, config: &Config) -> MyResult<()> {
+    let file_name = pick_random_source(sources, &config.seed);
+    let entry = pick_random_entry(&file_name, &config)?;
+    let fortune = read_fortune_from_file(entry)?;
+    println!("{fortune}");
+    Ok(())
+}
+
+fn find_fortunes_matching_pattern(sources: Vec<String>, config: &Config) -> MyResult<()> {
+
+    Ok(())
 }
 
 fn read_dir(dir: &str) -> Vec<String> {
@@ -161,7 +173,7 @@ fn pick_random_entry(file_name: &str, config: &Config) -> MyResult<Entry> {
     Ok(entry)
 }
 
-fn parse_num_entries(mut lines: &mut Lines<BufReader<File>>) -> MyResult<usize> {
+fn parse_num_entries(lines: &mut Lines<BufReader<File>>) -> MyResult<usize> {
     let first_line = match lines.next() {
         None => return Err(From::from("dat file is blank")),
         Some(line) => line?

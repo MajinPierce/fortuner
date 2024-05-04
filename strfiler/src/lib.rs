@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::fmt::LowerExp;
 use std::fs::{File, metadata};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
