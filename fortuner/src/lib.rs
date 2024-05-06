@@ -6,7 +6,7 @@ use clap::ArgMatches;
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::{Rng, SeedableRng};
 use regex::{Regex, RegexBuilder};
-use walkdir::WalkDir;
+use walkdir::{WalkDir};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -34,7 +34,7 @@ pub fn get_args() -> MyResult<Config> {
         .about("fortune but Rust")
         .arg(clap::Arg::new(ARG_SOURCE_ID)
             .num_args(0..)
-            .default_value("$HOME/Documents/sources")
+            .default_value("../fortuner/sources")
         )
         .arg(clap::Arg::new(ARG_REGEX_ID)
             .short('m')
@@ -49,13 +49,14 @@ pub fn get_args() -> MyResult<Config> {
         .arg(clap::Arg::new(ARG_SEED_ID)
             .short('s')
             .long("seed")
+            .value_parser(clap::value_parser!(u64))
             .conflicts_with_all([ARG_REGEX_ID, ARG_INSENS_ID])
             .help("Set the u64 rng seed for consistent fortune retrieval"))
         .get_matches();
 
     let sources = parse_file_names(&mut args)?;
     let pattern = build_pattern(&mut args)?;
-    let seed = parse_seed(&mut args)?;
+    let seed = args.remove_one(ARG_SEED_ID);
     Ok(Config{sources, pattern, seed})
 }
 
@@ -71,27 +72,18 @@ fn build_pattern(args: &mut ArgMatches) -> MyResult<Option<Regex>> {
         return Ok(None);
     }
     let pattern: String = args.remove_one(ARG_REGEX_ID).unwrap();
-    let regex =  RegexBuilder::new(pattern.as_str())
+    let regex =  RegexBuilder::new(&pattern)
         .case_insensitive(args.get_flag(ARG_INSENS_ID))
         .build()?;
     Ok(Some(regex))
 }
 
-fn parse_seed(args: &mut ArgMatches) -> MyResult<Option<u64>> {
-    if !args.contains_id(ARG_SEED_ID) {
-        return Ok(None);
-    }
-    let seed_str =  args.remove_one::<String>(ARG_SEED_ID).unwrap();
-    let seed: u64 = seed_str.parse()?;
-    Ok(Some(seed))
-}
-
 pub fn run(config: Config) -> MyResult<()> {
     let sources = get_full_source_list(&config)?;
-    if config.pattern.is_some() {
-        find_fortunes_matching_pattern(sources, config)
-    } else {
+    if let None = &config.pattern {
         get_random_fortune(sources, config)
+    } else {
+        find_fortunes_matching_pattern(sources, config)
     }
 }
 
@@ -132,8 +124,11 @@ fn get_random_fortune(sources: Vec<String>, config: Config) -> MyResult<()> {
 fn find_fortunes_matching_pattern(sources: Vec<String>, config: Config) -> MyResult<()> {
     let mut all_entries: Vec<Vec<Entry>> = Vec::new();
     for source in &sources {
-        let entries = get_entries(source)?;
-        all_entries.push(entries);
+        if let Ok(entries) = get_entries(source) {
+            all_entries.push(entries);
+        } else {
+            eprintln!("Could not read entries from source: {source}");
+        }
     }
     find_matching_entries(all_entries, &config.pattern.unwrap())
 }
@@ -227,7 +222,14 @@ fn parse_entry_offset_and_size(mut lines: Lines<BufReader<File>>, index: usize) 
 
 fn find_matching_entries(all_entries: Vec<Vec<Entry>>, pattern: &Regex) -> MyResult<()> {
     for entries in all_entries {
-        let mut file = open_file(&entries.get(0).unwrap().file_name)?;
+        let file_name  = &entries.get(0).unwrap().file_name;
+        let mut file = match open_file(file_name) {
+            Ok(open_file) => open_file,
+            Err(e) => {
+                eprintln!("Could not open {file_name}: {e}");
+                continue;
+            }
+        };
         for entry in entries {
             let fortune = read_fortune_from_file(&entry, &mut file)?;
             if pattern.is_match(&fortune) {
