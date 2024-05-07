@@ -34,7 +34,7 @@ pub fn get_args() -> MyResult<Config> {
         .about("fortune but Rust")
         .arg(clap::Arg::new(ARG_SOURCE_ID)
             .num_args(0..)
-            .default_value("../fortuner/sources")
+            .default_value("/usr/local/games/fortuner/fortunes")
         )
         .arg(clap::Arg::new(ARG_REGEX_ID)
             .short('m')
