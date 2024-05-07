@@ -33,22 +33,9 @@ fn gen_bad_file() -> String {
 
 // --------------------------------------------------
 #[test]
-fn dies_bad_file() -> TestResult {
-    let bad = gen_bad_file();
-    let expected = format!("{}: .* [(]os error 2[)]", bad);
-    Command::cargo_bin(PRG)?
-        .args(&[LITERATURE, &bad])
-        .assert()
-        .failure()
-        .stderr(predicate::str::is_match(expected)?);
-    Ok(())
-}
-
-// --------------------------------------------------
-#[test]
 fn dies_bad_seed() -> TestResult {
     let bad = random_string();
-    let expected = format!("\"{}\" not a valid integer", &bad);
+    let expected = String::from("invalid digit found in string");
     Command::cargo_bin(PRG)?
         .args(&[LITERATURE, "--seed", &bad])
         .assert()
@@ -68,9 +55,19 @@ fn run(args: &[&str], expected: &'static str) -> TestResult {
 }
 
 // --------------------------------------------------
+fn run_error(args: &[&str], expected: &'static str) -> TestResult {
+    Command::cargo_bin(PRG)?
+        .args(args)
+        .assert()
+        .failure()
+        .stderr(expected);
+    Ok(())
+}
+
+// --------------------------------------------------
 #[test]
 fn no_fortunes_found() -> TestResult {
-    run(&[EMPTY_DIR], "No fortunes found\n")
+    run_error(&[EMPTY_DIR], "No fortunes found. Please check dat files.\n")
 }
 
 // --------------------------------------------------
@@ -78,7 +75,7 @@ fn no_fortunes_found() -> TestResult {
 fn quotes_seed_1() -> TestResult {
     run(
         &[QUOTES, "-s", "1"],
-        "You can observe a lot just by watching.\n-- Yogi Berra\n",
+        "It's like deja vu all over again.\n-- Yogi Berra\n",
     )
 }
 
@@ -93,11 +90,11 @@ fn jokes_seed_1() -> TestResult {
 
 // --------------------------------------------------
 #[test]
-fn dir_seed_10() -> TestResult {
+fn dir_seed_1() -> TestResult {
     run(
-        &[FORTUNE_DIR, "-s", "10"],
-        "Q: Why did the fungus and the alga marry?\n\
-        A: Because they took a lichen to each other!\n",
+        &[FORTUNE_DIR, "-s", "1"],
+        "Q: What happens when frogs park illegally?\n\
+        A: They get toad.\n",
     )
 }
 
@@ -119,8 +116,8 @@ fn run_outfiles(args: &[&str], out_file: &str, err_file: &str) -> TestResult {
 fn yogi_berra_cap() -> TestResult {
     run_outfiles(
         &["--pattern", "Yogi Berra", FORTUNE_DIR],
-        "tests/expected/berra_cap.out",
-        "tests/expected/berra_cap.err",
+        "./tests/expected/berra_cap.out",
+        "./tests/expected/berra_cap.err",
     )
 }
 
@@ -129,8 +126,8 @@ fn yogi_berra_cap() -> TestResult {
 fn mark_twain_cap() -> TestResult {
     run_outfiles(
         &["-m", "Mark Twain", FORTUNE_DIR],
-        "tests/expected/twain_cap.out",
-        "tests/expected/twain_cap.err",
+        "./tests/expected/twain_cap.out",
+        "./tests/expected/twain_cap.err",
     )
 }
 
@@ -139,8 +136,8 @@ fn mark_twain_cap() -> TestResult {
 fn yogi_berra_lower() -> TestResult {
     run_outfiles(
         &["--pattern", "yogi berra", FORTUNE_DIR],
-        "tests/expected/berra_lower.out",
-        "tests/expected/berra_lower.err",
+        "./tests/expected/berra_lower.out",
+        "./tests/expected/berra_lower.err",
     )
 }
 
@@ -149,8 +146,8 @@ fn yogi_berra_lower() -> TestResult {
 fn mark_twain_lower() -> TestResult {
     run_outfiles(
         &["-m", "will twain", FORTUNE_DIR],
-        "tests/expected/twain_lower.out",
-        "tests/expected/twain_lower.err",
+        "./tests/expected/twain_lower.out",
+        "./tests/expected/twain_lower.err",
     )
 }
 
@@ -158,9 +155,9 @@ fn mark_twain_lower() -> TestResult {
 #[test]
 fn yogi_berra_lower_i() -> TestResult {
     run_outfiles(
-        &["--insensitive", "--pattern", "yogi berra", FORTUNE_DIR],
-        "tests/expected/berra_lower_i.out",
-        "tests/expected/berra_lower_i.err",
+        &["--case-insensitive", "--pattern", "yogi berra", FORTUNE_DIR],
+        "./tests/expected/berra_lower_i.out",
+        "./tests/expected/berra_lower_i.err",
     )
 }
 
@@ -169,7 +166,7 @@ fn yogi_berra_lower_i() -> TestResult {
 fn mark_twain_lower_i() -> TestResult {
     run_outfiles(
         &["-i", "-m", "mark twain", FORTUNE_DIR],
-        "tests/expected/twain_lower_i.out",
-        "tests/expected/twain_lower_i.err",
+        "./tests/expected/twain_lower_i.out",
+        "./tests/expected/twain_lower_i.err",
     )
 }

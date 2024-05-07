@@ -106,7 +106,7 @@ fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
         .collect();
 
     if sources.is_empty() {
-        Err(From::from("No valid sources. Please check dat files."))
+        Err(From::from("No fortunes found. Please check dat files."))
     } else {
         Ok(sources)
     }
@@ -222,22 +222,34 @@ fn parse_entry_offset_and_size(mut lines: Lines<BufReader<File>>, index: usize) 
 
 fn find_matching_entries(all_entries: Vec<Vec<Entry>>, pattern: &Regex) -> MyResult<()> {
     for entries in all_entries {
-        let file_name  = &entries.get(0).unwrap().file_name;
-        let mut file = match open_file(file_name) {
+        let file_path = entries.get(0).unwrap().file_name.clone();
+        let mut file = match open_file(&file_path) {
             Ok(open_file) => open_file,
             Err(e) => {
-                eprintln!("Could not open {file_name}: {e}");
+                eprintln!("Could not open {file_path}: {e}");
                 continue;
             }
         };
+        let mut did_find_match = false;
         for entry in entries {
             let fortune = read_fortune_from_file(&entry, &mut file)?;
             if pattern.is_match(&fortune) {
                 println!("{fortune}");
+                if !did_find_match {
+                    did_find_match = true;
+                }
             }
+        }
+        if did_find_match {
+            print_file_name(&file_path);
         }
     }
     Ok(())
+}
+
+fn print_file_name(file_path: &str) {
+    let file_name = Path::new(file_path).file_name().unwrap().to_str().unwrap();
+    eprintln!("({file_name})\n%");
 }
 
 fn read_fortune_from_file(entry: &Entry, file: &mut File) -> MyResult<String> {
