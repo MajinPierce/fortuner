@@ -176,3 +176,79 @@ fn write_entries(file_name: &str, entries: Vec<Entry>) {
         file.write(formatted_entry.as_bytes()).unwrap();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    use super::*;
+
+    #[test]
+    fn test_get_full_source_list() {
+        let source_dir = String::from("./tests/inputs");
+        let config = Config{ sources: vec![source_dir], delim: "%".to_string() };
+        let expected_sources_str = vec!["./tests/inputs/ascii-art","./tests/inputs/jokes","./tests/inputs/literature","./tests/inputs/quotes","./tests/inputs/empty/.gitkeep"];
+        let expected_sources: Vec<String> = expected_sources_str.iter()
+            .map(|source| String::from(*source))
+            .collect();
+        let result = get_full_source_list(&config);
+
+        assert!(result.is_ok());
+        let sources = result.unwrap();
+        for source in sources.iter() {
+            assert!(expected_sources.iter().any(|s| s == source));
+        }
+    }
+
+    #[test]
+    fn test_get_full_source_list_empty() {
+        let source_dir = String::from("./tests/inputs/empty_dir");
+        let config = Config{ sources: vec![source_dir], delim: "%".to_string() };
+        let result = get_full_source_list(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_is_invalid_type_no_extension() {
+        let invalid = is_invalid_type("tests/ascii-art");
+        assert!(!invalid)
+    }
+
+    #[test]
+    fn test_is_invalid_type_txt() {
+        let invalid = is_invalid_type("tests/ascii-art.txt");
+        assert!(!invalid)
+    }
+
+    #[test]
+    fn test_is_invalid_type_dat() {
+        let invalid = is_invalid_type("tests/ascii-art.dat");
+        assert!(invalid)
+    }
+
+    #[test]
+    fn test_is_invalid_type_ds_store() {
+        let invalid = is_invalid_type("tests/.DS_Store");
+        assert!(invalid)
+    }
+
+    #[test]
+    fn test_get_entry_locations() {
+        let cursor = io::Cursor::new(b"lorem\n%\nipsum\n%\ndolor\n");
+        let mut buf_read: Input = Box::new(cursor);
+
+        let result = get_entry_locations(&mut buf_read, "%");
+
+        assert!(result.is_ok());
+        let entries = result.unwrap();
+        assert_eq!(3, entries.len());
+        //first entry
+        assert_eq!(0, entries.get(0).unwrap().offset);
+        assert_eq!(6, entries.get(0).unwrap().size);
+        //second entry
+        assert_eq!(8, entries.get(1).unwrap().offset);
+        assert_eq!(6, entries.get(1).unwrap().size);
+        //third entry
+        assert_eq!(16, entries.get(2).unwrap().offset);
+        assert_eq!(6, entries.get(2).unwrap().size);
+    }
+}
