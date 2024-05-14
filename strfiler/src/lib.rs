@@ -1,8 +1,8 @@
+use clap::ArgMatches;
 use std::error::Error;
-use std::fs::{File, metadata};
+use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use clap::ArgMatches;
 use walkdir::WalkDir;
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
@@ -28,13 +28,13 @@ pub fn get_args() -> MyResult<Config> {
         .author("MajinPierce")
         .version("0.1.0")
         .about("strfile but Rust")
-        .arg(clap::Arg::new(ARG_FILES_ID)
-            .num_args(1..)
-            .required(true))
-        .arg(clap::Arg::new(ARG_DELIM_ID)
-            .short('c')
-            .long("delim")
-            .default_value("%"))
+        .arg(clap::Arg::new(ARG_FILES_ID).num_args(1..).required(true))
+        .arg(
+            clap::Arg::new(ARG_DELIM_ID)
+                .short('c')
+                .long("delim")
+                .default_value("%"),
+        )
         .get_matches();
 
     get_config_from_args(args)
@@ -43,7 +43,7 @@ pub fn get_args() -> MyResult<Config> {
 fn get_config_from_args(mut args: ArgMatches) -> MyResult<Config> {
     let sources = parse_file_names(&mut args)?;
     let delim = args.remove_one(ARG_DELIM_ID).unwrap();
-    Ok(Config{ sources, delim})
+    Ok(Config { sources, delim })
 }
 
 fn parse_file_names(args: &mut ArgMatches) -> MyResult<Vec<String>> {
@@ -66,11 +66,13 @@ fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
     let mut sources: Vec<String> = Vec::new();
     for path in &config.sources {
         match metadata(path) {
-            Ok(meta) => if meta.is_dir() {
-                sources.append(&mut read_dir(path));
-            } else {
-                sources.push(path.clone());
-            },
+            Ok(meta) => {
+                if meta.is_dir() {
+                    sources.append(&mut read_dir(path));
+                } else {
+                    sources.push(path.clone());
+                }
+            }
             Err(e) => {
                 eprintln!("{path}: {e}");
             }
@@ -85,7 +87,8 @@ fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
 }
 
 fn read_dir(dir: &str) -> Vec<String> {
-    WalkDir::new(dir).into_iter()
+    WalkDir::new(dir)
+        .into_iter()
         .map(|result| String::from(result.unwrap().path().to_str().unwrap()))
         .filter(|sub_path| !metadata(sub_path).unwrap().is_dir())
         .filter(|sub_path| !is_invalid_type(sub_path))
@@ -93,7 +96,7 @@ fn read_dir(dir: &str) -> Vec<String> {
 }
 
 fn is_invalid_type(path: &str) -> bool {
-    let path= Path::new(path);
+    let path = Path::new(path);
     let is_dat = match path.extension() {
         None => false,
         Some(ext) => ext == "dat",
@@ -107,10 +110,9 @@ fn create_dat_for_source(source: &str, delim: &str) -> MyResult<()> {
     eprintln!("creating dat for {source}");
     if let Some(mut input) = open_file(source) {
         let entries = get_entry_locations(&mut input, delim)?;
-        if !entries.is_empty(){
+        if !entries.is_empty() {
             write_entries(source, entries);
-        }
-        else {
+        } else {
             eprintln!("source is empty: {source}");
         }
     };
@@ -125,7 +127,7 @@ fn open_file(path: &str) -> Option<Input> {
                 return None;
             }
             Some(Box::new(BufReader::new(open_file)))
-        },
+        }
         Err(e) => {
             eprintln!("Could not open {path}: {e}");
             None
@@ -142,12 +144,18 @@ fn get_entry_locations(input: &mut Input, delim: &str) -> MyResult<Vec<Entry>> {
         let line_size = input.read_line(&mut buf)?;
         if line_size == 0 {
             if !entries.is_empty() {
-                entries.push(Entry {offset, size: entry_size});
+                entries.push(Entry {
+                    offset,
+                    size: entry_size,
+                });
             }
             break;
         }
         if buf.as_str().trim() == delim {
-            entries.push(Entry {offset, size: entry_size});
+            entries.push(Entry {
+                offset,
+                size: entry_size,
+            });
             offset += entry_size + buf.len();
             entry_size = 0;
             buf.clear();
@@ -161,9 +169,7 @@ fn get_entry_locations(input: &mut Input, delim: &str) -> MyResult<Vec<Entry>> {
 }
 
 fn filter_empty_entries(entries: Vec<Entry>) -> Vec<Entry> {
-    entries.into_iter()
-        .filter(|entry| entry.size > 0)
-        .collect()
+    entries.into_iter().filter(|entry| entry.size > 0).collect()
 }
 
 fn write_entries(file_name: &str, entries: Vec<Entry>) {
@@ -179,15 +185,25 @@ fn write_entries(file_name: &str, entries: Vec<Entry>) {
 
 #[cfg(test)]
 mod tests {
-    use std::io;
     use super::*;
+    use std::io;
 
     #[test]
     fn test_get_full_source_list() {
         let source_dir = String::from("./tests/inputs");
-        let config = Config{ sources: vec![source_dir], delim: "%".to_string() };
-        let expected_sources_str = vec!["./tests/inputs/ascii-art","./tests/inputs/jokes","./tests/inputs/literature","./tests/inputs/quotes","./tests/inputs/empty/.gitkeep"];
-        let expected_sources: Vec<String> = expected_sources_str.iter()
+        let config = Config {
+            sources: vec![source_dir],
+            delim: "%".to_string(),
+        };
+        let expected_sources_str = vec![
+            "./tests/inputs/ascii-art",
+            "./tests/inputs/jokes",
+            "./tests/inputs/literature",
+            "./tests/inputs/quotes",
+            "./tests/inputs/empty/.gitkeep",
+        ];
+        let expected_sources: Vec<String> = expected_sources_str
+            .iter()
             .map(|source| String::from(*source))
             .collect();
         let result = get_full_source_list(&config);
@@ -202,7 +218,10 @@ mod tests {
     #[test]
     fn test_get_full_source_list_empty() {
         let source_dir = String::from("./tests/inputs/empty_dir");
-        let config = Config{ sources: vec![source_dir], delim: "%".to_string() };
+        let config = Config {
+            sources: vec![source_dir],
+            delim: "%".to_string(),
+        };
         let result = get_full_source_list(&config);
         assert!(result.is_err());
     }

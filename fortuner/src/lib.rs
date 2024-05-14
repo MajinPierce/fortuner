@@ -1,12 +1,12 @@
-use std::error::Error;
-use std::fs::{File, metadata};
-use std::io::{BufRead, BufReader, Lines, Read, Seek, SeekFrom};
-use std::path::Path;
 use clap::ArgMatches;
 use rand::prelude::{IteratorRandom, StdRng};
 use rand::{Rng, SeedableRng};
 use regex::{Regex, RegexBuilder};
-use walkdir::{WalkDir};
+use std::error::Error;
+use std::fs::{metadata, File};
+use std::io::{BufRead, BufReader, Lines, Read, Seek, SeekFrom};
+use std::path::Path;
+use walkdir::WalkDir;
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -32,32 +32,45 @@ pub fn get_args() -> MyResult<Config> {
         .author("MajinPierce")
         .version("0.1.0")
         .about("fortune but Rust")
-        .arg(clap::Arg::new(ARG_SOURCE_ID)
-            .num_args(0..)
-            .default_value("/usr/local/games/fortuner/fortunes")
+        .arg(
+            clap::Arg::new(ARG_SOURCE_ID)
+                .num_args(0..)
+                .default_value("/usr/local/games/fortuner/fortunes"),
         )
-        .arg(clap::Arg::new(ARG_REGEX_ID)
-            .short('m')
-            .long("pattern")
-            .help("Basic regex pattern matching. Searches for any sources that match the pattern"))
-        .arg(clap::Arg::new(ARG_INSENS_ID)
-            .short('i')
-            .long("case-insensitive")
-            .requires(ARG_REGEX_ID)
-            .action(clap::ArgAction::SetTrue)
-            .help("Enables case insensitive pattern matching"))
-        .arg(clap::Arg::new(ARG_SEED_ID)
-            .short('s')
-            .long("seed")
-            .value_parser(clap::value_parser!(u64))
-            .conflicts_with_all([ARG_REGEX_ID, ARG_INSENS_ID])
-            .help("Set the u64 rng seed for consistent fortune retrieval"))
+        .arg(
+            clap::Arg::new(ARG_REGEX_ID)
+                .short('m')
+                .long("pattern")
+                .help(
+                    "Basic regex pattern matching. Searches for any sources that match the pattern",
+                ),
+        )
+        .arg(
+            clap::Arg::new(ARG_INSENS_ID)
+                .short('i')
+                .long("case-insensitive")
+                .requires(ARG_REGEX_ID)
+                .action(clap::ArgAction::SetTrue)
+                .help("Enables case insensitive pattern matching"),
+        )
+        .arg(
+            clap::Arg::new(ARG_SEED_ID)
+                .short('s')
+                .long("seed")
+                .value_parser(clap::value_parser!(u64))
+                .conflicts_with_all([ARG_REGEX_ID, ARG_INSENS_ID])
+                .help("Set the u64 rng seed for consistent fortune retrieval"),
+        )
         .get_matches();
 
     let sources = parse_file_names(&mut args)?;
     let pattern = build_pattern(&mut args)?;
     let seed = args.remove_one(ARG_SEED_ID);
-    Ok(Config{sources, pattern, seed})
+    Ok(Config {
+        sources,
+        pattern,
+        seed,
+    })
 }
 
 fn parse_file_names(args: &mut ArgMatches) -> MyResult<Vec<String>> {
@@ -72,7 +85,7 @@ fn build_pattern(args: &mut ArgMatches) -> MyResult<Option<Regex>> {
         return Ok(None);
     }
     let pattern: String = args.remove_one(ARG_REGEX_ID).unwrap();
-    let regex =  RegexBuilder::new(&pattern)
+    let regex = RegexBuilder::new(&pattern)
         .case_insensitive(args.get_flag(ARG_INSENS_ID))
         .build()?;
     Ok(Some(regex))
@@ -91,11 +104,13 @@ fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
     let mut sources: Vec<String> = Vec::new();
     for path in &config.sources {
         match metadata(path) {
-            Ok(meta) => if meta.is_dir() {
-                sources.append(&mut read_dir(path));
-            } else {
-                sources.push(path.clone())
-            },
+            Ok(meta) => {
+                if meta.is_dir() {
+                    sources.append(&mut read_dir(path));
+                } else {
+                    sources.push(path.clone())
+                }
+            }
             Err(e) => {
                 eprintln!("{path}: {e}");
             }
@@ -132,7 +147,8 @@ fn find_fortunes_matching_pattern(sources: Vec<String>, config: Config) -> MyRes
 }
 
 fn read_dir(dir: &str) -> Vec<String> {
-    WalkDir::new(dir).into_iter()
+    WalkDir::new(dir)
+        .into_iter()
         .map(|result| String::from(result.unwrap().path().to_str().unwrap()))
         .filter(|sub_path| !metadata(sub_path).unwrap().is_dir())
         .filter(|sub_path| !is_dat(sub_path))
@@ -152,7 +168,8 @@ fn has_dat(path: &str) -> bool {
 
 fn pick_random_source(sources: Vec<String>, seed_opt: &Option<u64>) -> String {
     let mut rng = get_rng(seed_opt);
-    let source = sources.iter()
+    let source = sources
+        .iter()
         .choose(&mut rng)
         .expect("List of sources was empty");
     source.clone()
@@ -161,7 +178,7 @@ fn pick_random_source(sources: Vec<String>, seed_opt: &Option<u64>) -> String {
 fn get_rng(seed_opt: &Option<u64>) -> StdRng {
     match seed_opt {
         None => StdRng::from_rng(rand::thread_rng()).unwrap(),
-        Some(seed) => StdRng::seed_from_u64(*seed)
+        Some(seed) => StdRng::seed_from_u64(*seed),
     }
 }
 
@@ -171,7 +188,11 @@ fn pick_random_entry(file_name: &str, config: &Config) -> MyResult<Entry> {
     let num_entries = parse_num_entries(&mut lines)?;
     let chosen_entry_index = choose_entry_index(num_entries, &config.seed);
     let (offset, size) = parse_entry_offset_and_size(lines, chosen_entry_index)?;
-    let entry = Entry{file_name: String::from(file_name), offset, size};
+    let entry = Entry {
+        file_name: String::from(file_name),
+        offset,
+        size,
+    };
     Ok(entry)
 }
 
@@ -184,11 +205,17 @@ fn get_entries(file_name: &str) -> MyResult<Vec<Entry>> {
         let line = lines.next().unwrap()?;
         let line_elem: Vec<&str> = line.split_whitespace().collect();
         if line_elem.len() < 2 {
-            return Err(From::from("dat file entry missing required info. Please validate dat file."));
+            return Err(From::from(
+                "dat file entry missing required info. Please validate dat file.",
+            ));
         }
         let offset = usize::from_str_radix(line_elem.get(0).unwrap(), 16)?;
         let size = usize::from_str_radix(line_elem.get(1).unwrap(), 16)?;
-        entries.push(Entry{file_name: String::from(file_name), offset, size})
+        entries.push(Entry {
+            file_name: String::from(file_name),
+            offset,
+            size,
+        })
     }
     Ok(entries)
 }
@@ -196,7 +223,7 @@ fn get_entries(file_name: &str) -> MyResult<Vec<Entry>> {
 fn parse_num_entries(lines: &mut Lines<BufReader<File>>) -> MyResult<usize> {
     let first_line = match lines.next() {
         None => return Err(From::from("dat file is blank")),
-        Some(line) => line?
+        Some(line) => line?,
     };
     let num_entries = usize::from_str_radix(&first_line, 16)?;
     Ok(num_entries)
@@ -207,11 +234,16 @@ fn choose_entry_index(num_entries: usize, seed_opt: &Option<u64>) -> usize {
     rng.gen_range(0..num_entries)
 }
 
-fn parse_entry_offset_and_size(mut lines: Lines<BufReader<File>>, index: usize) -> MyResult<(usize, usize)>{
+fn parse_entry_offset_and_size(
+    mut lines: Lines<BufReader<File>>,
+    index: usize,
+) -> MyResult<(usize, usize)> {
     let line = lines.nth(index).unwrap()?;
     let line_elem: Vec<&str> = line.split_whitespace().collect();
     if line_elem.len() < 2 {
-        return Err(From::from("dat file entry missing required info. Please validate dat file."));
+        return Err(From::from(
+            "dat file entry missing required info. Please validate dat file.",
+        ));
     }
     let offset = usize::from_str_radix(line_elem.get(0).unwrap(), 16)?;
     let size = usize::from_str_radix(line_elem.get(1).unwrap(), 16)?;
@@ -261,7 +293,7 @@ fn read_fortune_from_file(entry: &Entry, file: &mut File) -> MyResult<String> {
 fn open_file(path: &str) -> MyResult<File> {
     match File::open(path) {
         Ok(open_file) => Ok(open_file),
-        Err(e) => Err(Box::from(e))
+        Err(e) => Err(Box::from(e)),
     }
 }
 
