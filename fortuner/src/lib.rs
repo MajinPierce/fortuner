@@ -80,7 +80,7 @@ fn build_pattern(args: &mut ArgMatches) -> MyResult<Option<Regex>> {
 
 pub fn run(config: Config) -> MyResult<()> {
     let sources = get_full_source_list(&config)?;
-    if let None = &config.pattern {
+    if config.pattern.is_none() {
         get_random_fortune(sources, config)
     } else {
         find_fortunes_matching_pattern(sources, config)
@@ -101,9 +101,7 @@ fn get_full_source_list(config: &Config) -> MyResult<Vec<String>> {
             }
         }
     }
-    sources = sources.into_iter()
-        .filter(|path| has_dat(path))
-        .collect();
+    sources.retain(|path| has_dat(path));
 
     if sources.is_empty() {
         Err(From::from("No fortunes found. Please check dat files."))
@@ -222,7 +220,7 @@ fn parse_entry_offset_and_size(mut lines: Lines<BufReader<File>>, index: usize) 
 
 fn find_matching_entries(all_entries: Vec<Vec<Entry>>, pattern: &Regex) -> MyResult<()> {
     for entries in all_entries {
-        let file_path = entries.get(0).unwrap().file_name.clone();
+        let file_path = entries.first().unwrap().file_name.clone();
         let mut file = match open_file(&file_path) {
             Ok(open_file) => open_file,
             Err(e) => {

@@ -170,10 +170,10 @@ fn write_entries(file_name: &str, entries: Vec<Entry>) {
     let dat_file = Path::new(file_name).with_extension("dat");
     let mut file = File::create(dat_file).unwrap();
     let size = format!("{:0>6x}\n", entries.len());
-    file.write(size.as_bytes()).unwrap();
+    file.write_all(size.as_bytes()).unwrap();
     for entry in entries {
         let formatted_entry = format!("{:0>6x} {:0>6x}\n", entry.offset, entry.size);
-        file.write(formatted_entry.as_bytes()).unwrap();
+        file.write_all(formatted_entry.as_bytes()).unwrap();
     }
 }
 
